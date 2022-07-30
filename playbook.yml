@@ -60,3 +60,36 @@
         - server.key
         - server.crt
         - ca.crt
+
+    - name: Create directory for client configuration files
+      ansible.builtin.file:
+        path: client-configs/keys
+        state: directory
+        recurse: true
+        mode: 0700
+
+    - name: Create private key for a client
+      community.crypto.openssl_privatekey:
+        path: client-configs/keys/client1.key
+
+    - name: Generate CSR to specify client subject
+      community.crypto.openssl_csr:
+        path: client1.csr
+        common_name: openvpn_client1
+        privatekey_path: client-configs/keys/client1.key
+
+    - name: Sign client1 csr
+      community.crypto.x509_certificate:
+        path: client-configs/keys/client1.crt
+        privatekey_path: client-configs/keys/client1.key
+        provider: ownca
+        ownca_path: ca.crt
+        ownca_privatekey_path: ca.key
+        csr_path: client1.csr
+
+    - name: Copy ta.key to client-configs/keys/
+      ansible.builtin.copy:
+        src: ta.key
+        dest: client-configs/keys/ta.key
+        remote_src: true
+        mode: preserve
