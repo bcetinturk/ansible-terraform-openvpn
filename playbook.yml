@@ -1,4 +1,62 @@
 - hosts: all
+  become: true
   tasks:
-    - name: Ping the machine
-      ansible.builtin.ping:
+    - name: Install Openvpn package
+      ansible.builtin.apt:
+        name: openvpn
+        update_cache: true
+
+    - name: Generate private key for Certificate Authority
+      community.crypto.openssl_privatekey:
+        path: ca.key
+
+    - name: Generate CSR to specify CA subject
+      community.crypto.openssl_csr:
+        path: ca.csr
+        common_name: openvpn_ca
+        privatekey_path: ca.key
+
+    - name: Create CA certificate
+      community.crypto.x509_certificate:
+        path: ca.crt
+        privatekey_path: ca.key
+        provider: selfsigned
+        csr_path: ca.csr
+        # force: true # remove later
+        # backup: true
+
+    - name: Create private key for openvpn server
+      community.crypto.openssl_privatekey:
+        path: server.key
+
+    - name: Generate CSR to specify server subject
+      community.crypto.openssl_csr:
+        path: server.csr
+        common_name: openvpn_server
+        privatekey_path: server.key
+
+    - name: Sign server csr
+      community.crypto.x509_certificate:
+        path: server.crt
+        privatekey_path: server.key
+        provider: ownca
+        ownca_path: ca.crt
+        ownca_privatekey_path: ca.key
+        csr_path: server.csr
+
+    - name: Generate pre-shared key to use with tls-crypt directive
+      ansible.builtin.command:
+        cmd: openvpn --genkey --secret ta.key
+        creates: ta.key
+
+    - name: Copy certificates and server's key to openvpn/server directory
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: /etc/openvpn/server
+        remote_src: true
+        mode: preserve
+      loop:
+        - ta.key
+        - server.key
+        - server.crt
+        - ca.crt
