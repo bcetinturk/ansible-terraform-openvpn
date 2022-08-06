@@ -93,3 +93,63 @@
         dest: client-configs/keys/ta.key
         remote_src: true
         mode: preserve
+
+    - name: Copy server.conf
+      ansible.builtin.copy:
+        src: server.conf
+        dest: /etc/openvpn/server/server.conf
+        mode: 0755
+
+    - name: Enable IP forwarding
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        sysctl_set: true
+        state: present
+        reload: true
+
+    - name: Get public network interface
+      ansible.builtin.shell:
+        cmd: "ip route list default | awk '{ print $5 }'"
+      changed_when: false
+      register: public_interface
+
+    - name: Add before rules for ufw
+      ansible.builtin.blockinfile:
+        path: /etc/ufw/before.rules
+        insertbefore: "^# Don't delete these required lines, otherwise there will be errors"
+        block: |
+          # START OPENVPN RULES
+          # NAT table rules
+          *nat
+          :POSTROUTING ACCEPT [0:0]
+          -A POSTROUTING -s 10.8.0.0/8 -o {{ public_interface.stdout_lines }} -j MASQUERADE
+          COMMIT
+          # END OPENVPN RULES
+
+    - name: Enable forwarding for ufw
+      ansible.builtin.lineinfile:
+        path: /etc/default/ufw
+        search_string: 'DEFAULT_FORWARD_POLICY="DROP"'
+        line: 'DEFAULT_FORWARD_POLICY="ACCEPT"'
+
+    - name: Enable port 1194 and 22 traffic
+      community.general.ufw:
+        port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+        rule: allow
+      loop:
+        - port: 1194
+          proto: udp
+        - port: 22
+          proto: tcp
+
+    - name: Enable ufw
+      community.general.ufw:
+        state: enabled
+
+    - name: Start Openvpn service
+      ansible.builtin.service:
+        name: openvpn-server@server
+        state: started
+        enabled: true
