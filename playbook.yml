@@ -153,3 +153,31 @@
         name: openvpn-server@server
         state: started
         enabled: true
+
+    - name: Create directory to store .ovpn files
+      ansible.builtin.file:
+        name: client-configs/files
+        state: directory
+
+    - name: Read contents
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        # This order is important
+        - ca.crt
+        - client-configs/keys/client1.crt
+        - client-configs/keys/client1.key
+        - ta.key
+      register: files
+
+    - name: Copy client file
+      ansible.builtin.template:
+        src: client.conf.j2
+        dest: client-configs/files/client1.ovpn
+        mode: 0755
+      vars:
+        server_ip: "{{ ansible_host }}"
+        ca: "{{ files.results[0].content | b64decode }}"
+        cert: "{{ files.results[1].content | b64decode }}"
+        key: "{{ files.results[2].content | b64decode }}"
+        tls_crypt: "{{ files.results[3].content | b64decode }}"
