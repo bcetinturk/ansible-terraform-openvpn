@@ -15,6 +15,11 @@
         path: ca.csr
         common_name: openvpn_ca
         privatekey_path: ca.key
+        basic_constraints:
+          - "CA:TRUE"
+        key_usage:
+          - "keyCertSign"
+          - "cRLSign"
 
     - name: Create CA certificate
       community.crypto.x509_certificate:
@@ -34,6 +39,12 @@
         path: server.csr
         common_name: openvpn_server
         privatekey_path: server.key
+        extended_key_usage:
+          - "serverAuth"
+        key_usage:
+          - "nonRepudiation"
+          - "digitalSignature"
+          - "keyAgreement"
 
     - name: Sign server csr
       community.crypto.x509_certificate:
@@ -167,13 +178,13 @@
         - ca.crt
         - client-configs/keys/client1.crt
         - client-configs/keys/client1.key
-        - ta.key
+        - client-configs/keys/ta.key
       register: files
 
     - name: Copy client file
       ansible.builtin.template:
         src: client.conf.j2
-        dest: client-configs/files/client1.ovpn
+        dest: client1.ovpn
         mode: 0755
       vars:
         server_ip: "{{ ansible_host }}"
